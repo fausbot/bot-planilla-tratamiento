@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: bot-planilla-tratamiento
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python bot_planilla_cloud.py
+    envVars:
+      - key: TELEGRAM_BOT_TOKEN
+        value: 8476499368:AAHeJAekWnKssJmVOD3wqq_f_jhVxsUcm2o
+      - key: GEMINI_API_KEY
+        value: AIzaSyDj-6_v_nk6HsCC-e7AtXnwWgL54BSUUtQ
