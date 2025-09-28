@@ -24,44 +24,23 @@ GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', 'AIzaSyDj-6_v_nk6HsCC-e7AtXnwWgL54B
 
 # --- CONFIGURACIÓN DE IA ---
 genai.configure(api_key=GEMINI_API_KEY)
-generation_config = genai.GenerationConfig(
-    temperature=0.1,
-    top_p=0.8,
-    top_k=10,
-    max_output_tokens=50,
-    stop_sequences=["\n", "."]
-)
-model = genai.GenerativeModel(
-    model_name="gemini-2.5-flash",
-    generation_config=generation_config
-)
+model = genai.GenerativeModel(model_name="gemini-2.5-flash")
 
 # --- CONFIGURACIÓN JSON CLOUD ---
 JSON_DATA_FILE = 'registros_planilla.json'
 JSON_BACKUP_FILE = 'registros_backup.json'
-
-# --- PATRONES DE VALIDACIÓN ---
-VALIDATION_PATTERNS = {
-    'fecha': re.compile(r'^\d{2}/\d{2}/\d{4}$'),
-    'hora': re.compile(r'^\d{1,2}:\d{2}$'),
-    'numero': re.compile(r'^\d*\.?\d+$'),
-    'si_no': re.compile(r'^(SI|NO)$', re.IGNORECASE),
-    'nivel': re.compile(r'^(Alto|Medio|Bajo)$', re.IGNORECASE)
-}
 
 # --- CONFIGURACIÓN DE CAMPOS ---
 FIELD_CONFIG = {
     'fecha': {
         'prompt': '📅 **Fecha** (DD/MM/YYYY o "hoy"):',
         'default': lambda: datetime.now().strftime('%d/%m/%Y'),
-        'quick_options': ['hoy'],
-        'validator': 'fecha'
+        'quick_options': ['hoy']
     },
     'hora': {
         'prompt': '⏰ **Hora(s) de visita** - Puedes seleccionar varias:',
         'default': lambda: datetime.now().strftime('%H:%M'),
         'quick_options': ['8:00', '10:00', '12:00', '14:00', '16:00', '18:00'],
-        'validator': 'hora',
         'multiple': True
     },
     'visita': {
@@ -87,57 +66,47 @@ FIELD_CONFIG = {
     'nivel_pozo': {
         'prompt': '📊 **Nivel del Pozo**:',
         'default': lambda: 'Medio',
-        'quick_options': ['Alto', 'Medio', 'Bajo'],
-        'validator': 'nivel'
+        'quick_options': ['Alto', 'Medio', 'Bajo']
     },
     'solidos': {
         'prompt': '🧪 **Sólidos (CC)**:',
-        'default': lambda: '0',
-        'validator': 'numero'
+        'default': lambda: '0'
     },
     'oxigeno_disuelto': {
         'prompt': '🫧 **Oxígeno Disuelto (mg/l)**:',
-        'default': lambda: '0',
-        'validator': 'numero'
+        'default': lambda: '0'
     },
     'cloro': {
         'prompt': '🟢 **Cloro (mg/l)**:',
-        'default': lambda: '0',
-        'validator': 'numero'
+        'default': lambda: '0'
     },
     'ph': {
         'prompt': '⚖️ **pH**:',
-        'default': lambda: '7.0',
-        'validator': 'numero'
+        'default': lambda: '7.0'
     },
     'medidor_salida': {
         'prompt': '📏 **Medidor de salida**:',
-        'default': lambda: '0',
-        'validator': 'numero'
+        'default': lambda: '0'
     },
     'aseo_alrededores': {
         'prompt': '🧹 **¿Aseo alrededores?**',
         'default': lambda: 'NO',
-        'quick_options': ['SI', 'NO'],
-        'validator': 'si_no'
+        'quick_options': ['SI', 'NO']
     },
     'lavado_canastilla': {
         'prompt': '🧺 **¿Lavado canastilla?**',
         'default': lambda: 'NO',
-        'quick_options': ['SI', 'NO'],
-        'validator': 'si_no'
+        'quick_options': ['SI', 'NO']
     },
     'desalojo_lodos': {
         'prompt': '🚛 **¿Desalojo de lodos?**',
         'default': lambda: 'NO',
-        'quick_options': ['SI', 'NO'],
-        'validator': 'si_no'
+        'quick_options': ['SI', 'NO']
     },
     'limpieza_sedimentador': {
         'prompt': '🧽 **¿Limpieza sedimentador?**',
         'default': lambda: 'NO',
-        'quick_options': ['SI', 'NO'],
-        'validator': 'si_no'
+        'quick_options': ['SI', 'NO']
     }
 }
 
@@ -147,7 +116,6 @@ FIELD_ORDER = list(FIELD_CONFIG.keys())
 class CloudDataManager:
     @staticmethod
     def init_json_files():
-        """Inicializa los archivos JSON si no existen"""
         for json_file in [JSON_DATA_FILE, JSON_BACKUP_FILE]:
             if not os.path.exists(json_file):
                 initial_data = {
@@ -158,33 +126,12 @@ class CloudDataManager:
                     },
                     'records': []
                 }
-                CloudDataManager._save_json(json_file, initial_data)
+                with open(json_file, 'w', encoding='utf-8') as f:
+                    json.dump(initial_data, f, indent=2, ensure_ascii=False)
                 logger.info(f"Archivo JSON creado: {json_file}")
     
     @staticmethod
-    def _save_json(filepath: str, data: dict) -> bool:
-        """Guarda datos en archivo JSON de forma segura"""
-        try:
-            with open(filepath, 'w', encoding='utf-8') as f:
-                json.dump(data, f, indent=2, ensure_ascii=False)
-            return True
-        except Exception as e:
-            logger.error(f"Error guardando {filepath}: {e}")
-            return False
-    
-    @staticmethod
-    def _load_json(filepath: str) -> dict:
-        """Carga datos desde archivo JSON"""
-        try:
-            with open(filepath, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        except Exception as e:
-            logger.error(f"Error cargando {filepath}: {e}")
-            return {'metadata': {'total_records': 0}, 'records': []}
-    
-    @staticmethod
     def save_record(record_data: dict) -> bool:
-        """Guarda un registro en el JSON principal y backup"""
         try:
             new_record = {
                 'id': datetime.now().strftime('%Y%m%d_%H%M%S_%f')[:-3],
@@ -192,66 +139,48 @@ class CloudDataManager:
                 'data': record_data
             }
             
-            json_data = CloudDataManager._load_json(JSON_DATA_FILE)
+            with open(JSON_DATA_FILE, 'r', encoding='utf-8') as f:
+                json_data = json.load(f)
+            
             json_data['records'].append(new_record)
             json_data['metadata']['total_records'] = len(json_data['records'])
             json_data['metadata']['last_updated'] = datetime.now().isoformat()
             
-            success_main = CloudDataManager._save_json(JSON_DATA_FILE, json_data)
-            success_backup = CloudDataManager._save_json(JSON_BACKUP_FILE, json_data)
+            with open(JSON_DATA_FILE, 'w', encoding='utf-8') as f:
+                json.dump(json_data, f, indent=2, ensure_ascii=False)
             
-            if success_main:
-                logger.info(f"Registro guardado - Total: {json_data['metadata']['total_records']}")
-                return True
-            else:
-                logger.error("Error guardando registro principal")
-                return False
-                
+            with open(JSON_BACKUP_FILE, 'w', encoding='utf-8') as f:
+                json.dump(json_data, f, indent=2, ensure_ascii=False)
+            
+            logger.info(f"Registro guardado - Total: {json_data['metadata']['total_records']}")
+            return True
+            
         except Exception as e:
             logger.error(f"Error en save_record: {e}")
             return False
     
     @staticmethod
     def get_stats() -> dict:
-        """Obtiene estadísticas de los registros"""
-        json_data = CloudDataManager._load_json(JSON_DATA_FILE)
-        file_size = 0
-        if os.path.exists(JSON_DATA_FILE):
-            file_size = round(os.path.getsize(JSON_DATA_FILE) / 1024, 2)
-        
-        return {
-            'total_records': json_data['metadata'].get('total_records', 0),
-            'last_updated': json_data['metadata'].get('last_updated', 'Nunca'),
-            'file_size_kb': file_size
-        }
-    
-    @staticmethod
-    def clear_records() -> bool:
-        """Limpia todos los registros"""
         try:
-            clean_data = {
-                'metadata': {
-                    'cleared': datetime.now().isoformat(),
-                    'version': '1.0',
-                    'total_records': 0
-                },
-                'records': []
+            with open(JSON_DATA_FILE, 'r', encoding='utf-8') as f:
+                json_data = json.load(f)
+                
+            file_size = 0
+            if os.path.exists(JSON_DATA_FILE):
+                file_size = round(os.path.getsize(JSON_DATA_FILE) / 1024, 2)
+            
+            return {
+                'total_records': json_data['metadata'].get('total_records', 0),
+                'last_updated': json_data['metadata'].get('last_updated', 'Nunca'),
+                'file_size_kb': file_size
             }
-            
-            success = CloudDataManager._save_json(JSON_DATA_FILE, clean_data)
-            if success:
-                logger.info("Registros limpiados exitosamente")
-            return success
-            
-        except Exception as e:
-            logger.error(f"Error limpiando registros: {e}")
-            return False
+        except:
+            return {'total_records': 0, 'last_updated': 'Nunca', 'file_size_kb': 0}
 
-# --- VALIDADOR LOCAL RÁPIDO ---
+# --- VALIDADOR ---
 class FastValidator:
     @staticmethod
     def normalize_input(value: str, field_name: str) -> str:
-        """Normalización rápida sin IA para casos comunes"""
         value = value.strip()
         
         if field_name == 'fecha':
@@ -272,15 +201,6 @@ class FastValidator:
                 hour = int(value)
                 if 0 <= hour <= 23:
                     return f"{hour:02d}:00"
-            if ':' in value:
-                try:
-                    parts = value.split(':')
-                    if len(parts) == 2:
-                        hour, minute = int(parts[0]), int(parts[1])
-                        if 0 <= hour <= 23 and 0 <= minute <= 59:
-                            return f"{hour:02d}:{minute:02d}"
-                except ValueError:
-                    pass
         
         elif field_name in ['aseo_alrededores', 'lavado_canastilla', 'desalojo_lodos', 'limpieza_sedimentador']:
             if value.lower() in ['s', 'si', 'yes', '1']:
@@ -299,9 +219,8 @@ class FastValidator:
         
         return value
 
-# --- GENERADOR DE TECLADOS INLINE ---
+# --- TECLADOS ---
 def create_quick_keyboard(field_name: str) -> Optional[InlineKeyboardMarkup]:
-    """Genera teclado inline para respuestas rápidas"""
     config = FIELD_CONFIG.get(field_name)
     if not config or 'quick_options' not in config:
         return None
@@ -340,12 +259,11 @@ def create_quick_keyboard(field_name: str) -> Optional[InlineKeyboardMarkup]:
     
     return InlineKeyboardMarkup(keyboard)
 
-# --- HANDLERS DEL BOT ---
+# --- HANDLERS ---
 data_manager = CloudDataManager()
 validator = FastValidator()
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Inicio optimizado"""
     context.user_data.clear()
     context.user_data['current_field_index'] = 0
     context.user_data['record_data'] = {}
@@ -366,7 +284,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await ask_current_field(update, context)
 
 async def ask_current_field(update: Update, context: ContextTypes.DEFAULT_TYPE, from_callback=False):
-    """Pregunta el campo actual con opciones rápidas"""
     field_index = context.user_data.get('current_field_index', 0)
     
     if field_index >= len(FIELD_ORDER):
@@ -393,7 +310,6 @@ async def ask_current_field(update: Update, context: ContextTypes.DEFAULT_TYPE, 
             await update.message.reply_text(prompt)
 
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Maneja respuestas de botones inline"""
     query = update.callback_query
     await query.answer()
     
@@ -404,13 +320,10 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         value = callback_parts[2] if len(callback_parts) > 2 else action
         
         current_index = context.user_data.get('current_field_index', 0)
-        if current_index >= len(FIELD_ORDER):
-            await query.edit_message_text("❌ Sesión expirada. Usa /start")
-            return
-            
         expected_field = FIELD_ORDER[current_index]
+        
         if field_name != expected_field:
-            await query.edit_message_text(f"❌ Campo incorrecto. Se esperaba: {expected_field}")
+            await query.edit_message_text(f"❌ Campo incorrecto")
             return
         
         if field_name == 'hora':
@@ -425,11 +338,9 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
     except Exception as e:
         logger.error(f"Error en callback: {e}")
-        await query.edit_message_text("❌ Error procesando respuesta. Usa /start")
+        await query.edit_message_text("❌ Error. Usa /start")
 
 async def handle_hora_callback(query, context: ContextTypes.DEFAULT_TYPE, action: str, value: str):
-    """Maneja el callback especial para horas múltiples"""
-    
     if 'selected_hours' not in context.user_data:
         context.user_data['selected_hours'] = []
     
@@ -471,8 +382,6 @@ async def handle_hora_callback(query, context: ContextTypes.DEFAULT_TYPE, action
 
 async def process_field_input(input_value: str, field_name: str, update: Update, 
                             context: ContextTypes.DEFAULT_TYPE, from_callback=False):
-    """Procesa la entrada de un campo específico"""
-    
     normalized_value = validator.normalize_input(input_value, field_name)
     context.user_data['record_data'][field_name] = normalized_value
     
@@ -488,7 +397,6 @@ async def process_field_input(input_value: str, field_name: str, update: Update,
     await ask_current_field(update, context, from_callback=from_callback)
 
 async def finalize_record(update: Update, context: ContextTypes.DEFAULT_TYPE, from_callback=False):
-    """Finaliza y guarda el registro en JSON cloud"""
     record_data = context.user_data.get('record_data', {})
     start_time = context.user_data.get('start_time')
     
@@ -518,11 +426,9 @@ async def finalize_record(update: Update, context: ContextTypes.DEFAULT_TYPE, fr
         )
         context.user_data.clear()
     else:
-        context.user_data['pending_save'] = True
         final_message = (
             "⚠️ **Error guardando en cloud**\n\n"
-            "📋 Datos conservados\n"
-            "🔄 /guardar para reintentar"
+            "🔄 /start para intentar de nuevo"
         )
     
     if from_callback:
@@ -531,26 +437,6 @@ async def finalize_record(update: Update, context: ContextTypes.DEFAULT_TYPE, fr
         await update.message.reply_text(final_message)
 
 async def handle_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Maneja entrada de texto directo"""
-    
-    if context.user_data.get('awaiting_cloud_clear'):
-        if update.message.text.upper() == 'LIMPIAR CLOUD':
-            success = data_manager.clear_records()
-            context.user_data.pop('awaiting_cloud_clear', None)
-            
-            if success:
-                await update.message.reply_text(
-                    "✅ **Registros cloud eliminados**\n\n"
-                    "☁️ Nube lista para nuevos datos\n"
-                    "🔄 /start para nuevo registro"
-                )
-            else:
-                await update.message.reply_text("❌ Error limpiando registros cloud")
-        else:
-            context.user_data.pop('awaiting_cloud_clear', None)
-            await update.message.reply_text("❌ Limpieza cancelada")
-        return
-    
     if context.user_data.get('awaiting_custom_hour'):
         custom_hour = update.message.text.strip()
         normalized_hour = validator.normalize_input(custom_hour, 'hora')
@@ -602,7 +488,6 @@ async def handle_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # --- COMANDOS ADICIONALES ---
 async def get_cloud_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Muestra estadísticas de la nube"""
     stats = data_manager.get_stats()
     
     await update.message.reply_text(
@@ -611,12 +496,10 @@ async def get_cloud_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"💾 Tamaño archivo: {stats['file_size_kb']} KB\n"
         f"⏰ Última actualización: {stats['last_updated'][:16] if stats['last_updated'] != 'Nunca' else 'Nunca'}\n"
         f"📍 Servidor: Render.com\n\n"
-        "⬇️ /descargar - Obtener datos JSON\n"
-        "🧹 /limpiar_cloud - Limpiar registros"
+        "⬇️ /descargar - Obtener datos JSON"
     )
 
 async def download_json(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Envía el archivo JSON para descarga"""
     if not os.path.exists(JSON_DATA_FILE):
         await update.message.reply_text("📭 No hay datos para descargar")
         return
@@ -633,56 +516,11 @@ async def download_json(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error enviando JSON: {e}")
         await update.message.reply_text("❌ Error enviando archivo")
 
-async def clear_cloud_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Limpia datos de la nube después de sincronización"""
-    stats = data_manager.get_stats()
-    
-    await update.message.reply_text(
-        f"⚠️ **¿Limpiar {stats['total_records']} registros?**\n\n"
-        "Esta acción eliminará todos los datos de la nube.\n"
-        "Úsala solo después de sincronizar con Excel.\n\n"
-        "Responde 'LIMPIAR CLOUD' para confirmar."
-    )
-    context.user_data['awaiting_cloud_clear'] = True
-
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Cancela el registro actual"""
     context.user_data.clear()
-    await update.message.reply_text("❌ Registro cancelado. Usa /start para comenzar nuevo registro")
+    await update.message.reply_text("❌ Registro cancelado. Usa /start")
 
-async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Muestra estado actual del registro"""
-    if context.user_data.get('pending_save'):
-        await update.message.reply_text(
-            "⚠️ **Registro con error de guardado**\n\n"
-            "💾 Usa /guardar para reintentar"
-        )
-        return
-    
-    if 'current_field_index' not in context.user_data:
-        await update.message.reply_text(
-            "📭 **No hay registro activo**\n\n"
-            "🔄 Usa /start para comenzar nuevo registro"
-        )
-        return
-    
-    current_index = context.user_data['current_field_index']
-    total_fields = len(FIELD_ORDER)
-    completed_fields = len(context.user_data.get('record_data', {}))
-    
-    progress_bar = "█" * (completed_fields * 10 // total_fields) + "░" * (10 - completed_fields * 10 // total_fields)
-    next_field = FIELD_ORDER[current_index] if current_index < total_fields else 'Completado'
-    
-    await update.message.reply_text(
-        f"📊 **Estado del Registro Activo**\n\n"
-        f"Progreso: {progress_bar} {completed_fields}/{total_fields}\n"
-        f"Siguiente campo: **{next_field.replace('_', ' ').title()}**\n\n"
-        "❌ Usa /cancel para cancelar registro"
-    )
-
-# --- CONFIGURACIÓN Y EJECUCIÓN ---
 def main():
-    """Función principal para Render.com"""
     data_manager.init_json_files()
     
     app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
@@ -690,10 +528,8 @@ def main():
     # Handlers
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("cancel", cancel))
-    app.add_handler(CommandHandler("status", status))
     app.add_handler(CommandHandler("stats", get_cloud_stats))
     app.add_handler(CommandHandler("descargar", download_json))
-    app.add_handler(CommandHandler("limpiar_cloud", clear_cloud_data))
     app.add_handler(CallbackQueryHandler(handle_callback))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_input))
     
@@ -708,7 +544,7 @@ def main():
         listen="0.0.0.0",
         port=PORT,
         url_path=TELEGRAM_BOT_TOKEN,
-        webhook_url=f"https://bot-planilla-tratamiento.onrender.com/{TELEGRAM_BOT_TOKEN}"
+        webhook_url=f"https://bot-planilla-tratamiento-abc123.onrender.com/{TELEGRAM_BOT_TOKEN}"
     )
 
 if __name__ == '__main__':
