@@ -682,4 +682,34 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # --- CONFIGURACIÓN Y EJECUCIÓN ---
 def main():
-    """
+    """Función principal para Render.com"""
+    data_manager.init_json_files()
+    
+    app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+    
+    # Handlers
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("cancel", cancel))
+    app.add_handler(CommandHandler("status", status))
+    app.add_handler(CommandHandler("stats", get_cloud_stats))
+    app.add_handler(CommandHandler("descargar", download_json))
+    app.add_handler(CommandHandler("limpiar_cloud", clear_cloud_data))
+    app.add_handler(CallbackQueryHandler(handle_callback))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_input))
+    
+    # Configuración para Render.com
+    PORT = int(os.environ.get('PORT', 8443))
+    
+    logger.info("🌱 Bot Planilla Cloud iniciando...")
+    logger.info(f"📊 Puerto: {PORT}")
+    
+    # Modo webhook para Render.com
+    app.run_webhook(
+        listen="0.0.0.0",
+        port=PORT,
+        url_path=TELEGRAM_BOT_TOKEN,
+        webhook_url=f"https://bot-planilla-tratamiento.onrender.com/{TELEGRAM_BOT_TOKEN}"
+    )
+
+if __name__ == '__main__':
+    main()
